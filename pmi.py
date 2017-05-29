@@ -99,7 +99,7 @@ def get_optimal_set(K, vocab_file, corpus_dir, p_seed, n_seed, polar_seed_file):
   with open(polar_seed_file, 'w') as fout:
     for i, polar in polar_seed:
       fout.write("%s\t%d\t%f\n"%(vocab_str[i], i, polar))
-  
+
   return get_set(polar_seed, K)
 
 if __name__=='__main__':
@@ -109,5 +109,5 @@ if __name__=='__main__':
 
   vocab_file, corpus_dir, polar_seed_file, K=sys.argv[1:]
   K = int(K)
-  
+
   get_optimal_set(K, vocab_file, corpus_dir, P_seed, N_seed, polar_seed_file)

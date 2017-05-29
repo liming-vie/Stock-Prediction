@@ -94,13 +94,22 @@ def load_vocab(file_path):
     idx+=1
   return vocab, vocab_str, vocab_count
 
+
+def saving_corpus(news_dir, output_file):
+  corpus = load_news_corpus(news_dir)
+  print 'Saving corpus in file %s'%output_file
+  with open(output_file, 'w') as fout:
+    fout.write(' '.join([str(i) for i in doc])+'\n')
+
+
 if __name__ == '__main__':
-  if len(sys.argv) != 5:
-    print 'Usage: python data_utils.py news_dir segment_dir vocab_file token_ids_dir'
+  if len(sys.argv) != 6:
+    print 'Usage: python data_utils.py news_dir segment_dir vocab_file token_ids_dir embedding_train_corpus'
     sys.exit(1)
 
-  news_dir, segment_dir, vocab_file, token_ids_dir = sys.argv[1:]
+  news_dir, segment_dir, vocab_file, token_ids_dir, embedding_train_file = sys.argv[1:]
 
   segment_corpus(news_dir, segment_dir)
   vocab = get_vocab(segment_dir, vocab_file)
   transform_corpurs_to_token_ids(segment_dir, token_ids_dir, vocab)
+  saving_corpus(token_ids_dir, embedding_train_file)
