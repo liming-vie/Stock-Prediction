@@ -8,12 +8,10 @@ from tqdm import tqdm
 from pyltp import Segmentor
 
 
-ltp_segmentor = Segmentor()
-ltp_segmentor.load('/home/olivia/ltp_data/cws.model')
-
-
 def segment_corpus(input_dir, output_dir):
   print 'Segmenting news corpus...'
+  ltp_segmentor = Segmentor()
+  ltp_segmentor.load('/home/olivia/ltp_data/cws.model')
   for fname in tqdm(os.listdir(input_dir)):
     with open(os.path.join(output_dir, fname), 'w') as fout:
       for line in open(os.path.join(input_dir, fname)):
@@ -47,7 +45,7 @@ def get_vocab(input_dir, output_file):
   idx = 0
   with open(output_file, 'w') as fout:
     for k, v in sorted_vocab:
-      fout.write("%s %d\n"%(k, v))
+      fout.write("%s\t%d\n"%(k, v))
       vocab[k] = idx
       idx += 1
   return vocab
@@ -69,6 +67,30 @@ def transform_corpurs_to_token_ids(input_dir, output_dir, vocab):
         ps[-1] = transform_to_token_ids(ps[-1], vocab)
         fout.write('\t'.join(ps)+'\n')
 
+
+def load_news_corpus(path):
+  print 'Loading news corpus...'
+  docs = []
+  for fname in tqdm(os.listdir(path)):
+    for line in open(os.path.join(path, fname)):
+      ps = line.rstrip().split('\t')
+      docs.append(("%s %s"%(ps[-3], ps[-1])).split()) # title, content
+  return docs
+
+
+def load_vocab(file_path):
+  print 'Loading vocab file...'
+  vocab_count = []
+  vocab = {}
+  vocab_str = []
+  idx=0
+  for line in tqdm(open(file_path)):
+    ps=line.split('\t')
+    vocab[ps[0]] = idx
+    vocab_count.append(int(ps[1]))
+    vocab_str.append(ps[0])
+    idx+=1
+  return vocab, vocab_str, vocab_count
 
 if __name__ == '__main__':
   news_dir = '../data/CnNewsReport'
