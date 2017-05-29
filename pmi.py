@@ -51,7 +51,10 @@ def Pwv(corpus, w, v):
 
 
 def pmi(corpus, pw, w, v):
-  return math.log(Pwv(corpus, w, v) / (pw[w] * pw[v]));
+  pwv = Pwv(corpus, w, v)
+  if pwv == 0.0:
+    return -1e10
+  return math.log(pwv / (pw[w] * pw[v]));
 
 
 def get_polar_seed(corpus, vocab_size, p_idx, n_idx):
