@@ -4,6 +4,7 @@
 __author__ = 'liming-vie'
 
 import os
+import sys
 from tqdm import tqdm
 from pyltp import Segmentor
 
@@ -74,7 +75,8 @@ def load_news_corpus(path):
   for fname in tqdm(os.listdir(path)):
     for line in open(os.path.join(path, fname)):
       ps = line.rstrip().split('\t')
-      docs.append(("%s %s"%(ps[-3], ps[-1])).split()) # title, content
+      text = "%s %s"%(ps[-3], ps[-1]) # title, content
+      docs.append([int(t) for t in text.split()])
   return docs
 
 
@@ -93,10 +95,11 @@ def load_vocab(file_path):
   return vocab, vocab_str, vocab_count
 
 if __name__ == '__main__':
-  news_dir = '../data/CnNewsReport'
-  segment_dir = '../output/segmented'
-  vocab_file = '../output/vocab'
-  token_ids_dir = '../output/token_ids'
+  if len(sys.argv) != 5:
+    print 'Usage: python data_utils.py news_dir segment_dir vocab_file token_ids_dir'
+    sys.exit(1)
+
+  news_dir, segment_dir, vocab_file, token_ids_dir = sys.argv[1:]
 
   segment_corpus(news_dir, segment_dir)
   vocab = get_vocab(segment_dir, vocab_file)

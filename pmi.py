@@ -66,7 +66,7 @@ def get_polar_seed(corpus, vocab_size, p_idx, n_idx):
     for ni in n_idx:
       pn += pmi(corpus, p_w, wi, ni)
     polar_seed[wi] = pp/len(p_idx) - pn/len(n_idx)
-  return sorted(polar_seed, reverse=True)
+  return sorted(enumerate(polar_seed), key=lambda x: x[1], reverse=True)
 
 
 def get_optimal_set(K, vocab_file, corpus_dir, p_seed, n_seed, polar_seed_file):
@@ -97,16 +97,17 @@ def get_optimal_set(K, vocab_file, corpus_dir, p_seed, n_seed, polar_seed_file):
 
   print 'Saving polar seed in file %s'%polar_seed_file
   with open(polar_seed_file, 'w') as fout:
-    for vocab, polar in zip(vocab_str, polar_seed):
-      fout.write("%s\t%f\n"%(vocab, polar))
+    for i, polar in polar_seed:
+      fout.write("%s\t%d\t%f\n"%(vocab_str[i], i, polar))
   
   return get_set(polar_seed, K)
 
-
 if __name__=='__main__':
-  vocab_file = '../output/vocab'
-  corpus_dir = '../output/token_ids'
-  polar_seed_file = '../output/porlar_seed'
-  K = 20
+  if len(sys.argv) != 5:
+    print 'Usage: python pmi.py vocab_file corpus_dir polar_seed_file K'
+    sys.exit(1)
+
+  vocab_file, corpus_dir, polar_seed_file, K=sys.argv[1:]
+  K = int(K)
   
   get_optimal_set(K, vocab_file, corpus_dir, P_seed, N_seed, polar_seed_file)
