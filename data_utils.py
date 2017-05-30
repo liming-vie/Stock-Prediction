@@ -11,7 +11,7 @@ from pyltp import Segmentor
 from collections import namedtuple
 
 
-News = namedtuple('News', 'date news')
+News = namedtuple('News', 'date titles contents')
 Price = namedtuple('Price', 'date close open change highest lowest amount turnover')
 StockInfo = namedtuple('StockInfo', 'name code news prices')
 
@@ -44,15 +44,20 @@ def load_stock_with_news(price_dir, news_dir):
     for line in open(os.path.join(news_dir, fname)):
       ps = line.rstrip().split('\t')
       codes = ps[-2].split(',')
-      news= '%s %s'%(ps[-3], ps[-1]) # title, content
       for code in codes:
         if code not in today_news:
           today_news[code] = []
-        today_news[code].append(news)
+        today_news[code].append([
+          map(int, ps[-3].split(' ')), 
+          map(int, ps[-1].split(' '))])
     for code in today_news:
-      stock_infos[code].news.append(News._make([d, today_news[code]]))
+      stock_infos[code].news.append(
+        News(date=d, 
+          titles=[t[0] for t in today_news[code]], 
+          contents=[t[1] for t in today_news[code]]))
   for code in stock_infos:
-    stock_infos[code]._replace(news=sorted(stock_infos[code].news, key=lambda x: x.date))
+    stock_infos[code]._replace(
+      news=sorted(stock_infos[code].news, key=lambda x: x.date))
 
   return stock_infos
 
@@ -98,7 +103,7 @@ def segment_corpus(input_dir, output_dir):
         fout.write('\t'.join(ps)+'\n')
 
 
-def get_vocab(input_dir, output_file):
+def get_vocab2idx(input_dir, output_file):
   def add_to_vocab(dic, snt):
     tokens = snt.split()
     for token in tokens:
@@ -152,7 +157,7 @@ def load_news_corpus(path):
     for line in open(os.path.join(path, fname)):
       ps = line.rstrip().split('\t')
       text = "%s %s"%(ps[-3], ps[-1]) # title, content
-      docs.append([int(t) for t in text.split()])
+      docs.append(map(int, text.split()))
   return docs
 
 def load_vocab(file_path):
@@ -185,6 +190,6 @@ if __name__ == '__main__':
   news_dir, segment_dir, vocab_file, token_ids_dir, embedding_train_file = sys.argv[1:]
   
   segment_corpus(news_dir, segment_dir)
-  vocab = get_vocab(segment_dir, vocab_file)
-  transform_corpurs_to_token_ids(segment_dir, token_ids_dir, vocab)
+  vocab2idx = get_vocab2idx(segment_dir, vocab_file)
+  transform_corpurs_to_token_ids(segment_dir, token_ids_dir, vocab2idx)
   saving_corpus(token_ids_dir, embedding_train_file)

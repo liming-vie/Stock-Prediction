@@ -34,3 +34,8 @@ sh train_word2vec.sh $embedding_train_file $word2vec_embedding
 fastText_output_dir=$output_dir/fastText
 mkdir -p $fastText_output_dir
 sh train_fastText.sh $price_dir $news_dir embed_train_file $fastText_output_dir model
+
+train_dir=../output/train_data
+mkdir -p $train_dir
+python model.py
+python model.py --test
