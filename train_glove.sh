@@ -4,20 +4,26 @@ set -e
 # Makes programs, downloads sample data, trains a GloVe model, and then evaluates it.
 # One optional argument can specify the language used for eval script: matlab, octave or [default] python
 
-CORPUS=../output/embedding_train_corpus
-VOCAB_FILE=../output/glove/vocab.txt
-COOCCURRENCE_FILE=../output/glove/cooccurrence.bin
-COOCCURRENCE_SHUF_FILE=../output/glove/cooccurrence.shuf.bin
+if [ $# != 3 ]; then
+  echo 'Usage: sh train_glove.sh corpus_file output_dir vector_file'
+  exit 1
+fi
+
+CORPUS=$1
+output_dir=$2
+VOCAB_FILE=$output_dir/vocab.txt
+COOCCURRENCE_FILE=$output_dir/cooccurrence.bin
+COOCCURRENCE_SHUF_FILE=$output_dir/cooccurrence.shuf.bin
 BUILDDIR=../glove/build
-SAVE_FILE=../output/glove/vectors
+SAVE_FILE=$output_dir/$3
 VERBOSE=2
 MEMORY=4.0
 VOCAB_MIN_COUNT=5
-VECTOR_SIZE=256
+VECTOR_SIZE=128
 MAX_ITER=35
 WINDOW_SIZE=15
-BINARY=2
-NUM_THREADS=10
+BINARY=0
+NUM_THREADS=24
 X_MAX=50
 
 echo "$ $BUILDDIR/vocab_count -min-count $VOCAB_MIN_COUNT -verbose $VERBOSE < $CORPUS > $VOCAB_FILE"

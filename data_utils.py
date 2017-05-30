@@ -5,8 +5,84 @@ __author__ = 'liming-vie'
 
 import os
 import sys
+import datetime
 from tqdm import tqdm
 from pyltp import Segmentor
+from collections import namedtuple
+
+
+News = namedtuple('News', 'date news')
+Price = namedtuple('Price', 'date close open change highest lowest amount turnover')
+StockInfo = namedtuple('StockInfo', 'name code news prices')
+
+def date(tstr):
+  ps = tstr.split('-')
+  return datetime.date(int(ps[0]), int(ps[1]), int(ps[2]))
+
+def load_stock_with_news(price_dir, news_dir):
+  basedate = datetime.date(2000, 1, 1)
+  stock_infos = {}
+
+  print 'Loading stock price info...'
+  for stock_name in tqdm(os.listdir(price_dir)):
+    ps = stock_name.split('.')
+    if ps[1] == 'txt':
+      continue
+    code, name = ps
+    prices = []
+    for line in open(os.path.join(price_dir, stock_name)):
+      ps = line.split('\t')
+      tmp = map(float, ps[1:])
+      tmp.insert(0, (date(ps[0]) - basedate).days)
+      prices.append(Price._make(tmp))
+    stock_infos[code] = StockInfo(name, code, [], prices)
+
+  print 'Loading stock news info...'
+  for fname in tqdm(os.listdir(news_dir)):
+    d = (date(fname.split('_')[1]) - basedate).days
+    today_news = {}
+    for line in open(os.path.join(news_dir, fname)):
+      ps = line.rstrip().split('\t')
+      codes = ps[-2].split(',')
+      news= '%s %s'%(ps[-3], ps[-1]) # title, content
+      for code in codes:
+        if code not in today_news:
+          today_news[code] = []
+        today_news[code].append(news)
+    for code in today_news:
+      stock_infos[code].news.append(News._make([d, today_news[code]]))
+  for code in stock_infos:
+    stock_infos[code]._replace(news=sorted(stock_infos[code].news, key=lambda x: x.date))
+
+  return stock_infos
+
+def load_word2vec(embed_file):
+  print 'Loading word2vec embedding...'
+  with open(embed_file) as fin:
+    size, dim = map(int, fin.readline().split())
+    ret = [0. for _ in xrange(size)]
+    for line in tqdm(fin.readlines()):
+      ps = line.rstrip().split()
+      vec = map(float, ps[1:])
+      try:
+        ret[int(ps[0])] = vec
+      except:
+        ret[-1] = vec
+  return ret
+
+
+def load_glove(embed_file):
+  print 'Loading glove embedding...'
+  lines = open(embed_file).readlines()
+  ret = [0. for _ in xrange(len(lines))]
+  for line in tqdm(lines):
+    ps = line.rstrip().split()
+    vec = map(float, ps[1:])
+    try:
+      ret[int(ps[0])] = vec
+    except:
+      ret[-1] = vec
+  return ret
 
 
 def segment_corpus(input_dir, output_dir):
@@ -79,20 +155,19 @@ def load_news_corpus(path):
       docs.append([int(t) for t in text.split()])
   return docs
 
-
 def load_vocab(file_path):
   print 'Loading vocab file...'
   vocab_count = []
-  vocab = {}
+  vocab2idx = {}
   vocab_str = []
   idx=0
   for line in tqdm(open(file_path)):
     ps=line.split('\t')
-    vocab[ps[0]] = idx
+    vocab2idx[ps[0]] = idx
     vocab_count.append(int(ps[1]))
     vocab_str.append(ps[0])
     idx+=1
-  return vocab, vocab_str, vocab_count
+  return vocab2idx, vocab_str, vocab_count
 
 
 def saving_corpus(news_dir, output_file):
@@ -108,7 +183,7 @@ if __name__ == '__main__':
     sys.exit(1)
 
   news_dir, segment_dir, vocab_file, token_ids_dir, embedding_train_file = sys.argv[1:]
-
+  
   segment_corpus(news_dir, segment_dir)
   vocab = get_vocab(segment_dir, vocab_file)
   transform_corpurs_to_token_ids(segment_dir, token_ids_dir, vocab)

@@ -29,17 +29,26 @@ def process_corpus(corpus):
   return corpus
 
 
+def Pw(corpus, v):
+  count = 0
+  for doc in corpus:
+    if v in doc:
+      count += 1
+  return count / float(len(corpus))
+
+
 def get_Pw(corpus, vocab_size):
   print 'Calculating P(w)...'
   ret = [0. for _ in xrange(vocab_size)]
-  N = float(len(corpus))
   for v in tqdm(xrange(vocab_size)):
-    count = 0
-    for doc in corpus:
-      if v in doc:
-        count += 1
-    ret[v] = count / N
+    ret[v] = Pw(corpus, v)
   return ret
+
+
+def get_set_Pw(corpus, p_idx, n_idx):
+  ppw = [Pw(corpus, v) for v in p_idx]
+  npw = [Pw(corpus, v) for v in n_idx]
+  return ppw, npw
 
 
 def Pwv(corpus, w, v):
@@ -50,29 +59,38 @@ def Pwv(corpus, w, v):
   return float(count) / len(corpus)
 
 
-def pmi(corpus, pw, w, v):
+def pmi(corpus, pw, pv, w, v):
   pwv = Pwv(corpus, w, v)
   if pwv == 0.0:
-    return -1e10
-  return math.log(pwv / (pw[w] * pw[v]));
+    return 0.
+  return math.log(pwv / (pw * pv));
 
 
-def get_polar_seed(corpus, vocab_size, p_idx, n_idx):
+def polar(corpus, p_idx, n_idx, ppw, npw, wi, pw):
+  pp = 0.
+  for i, pi in enumerate(p_idx):
+    pp += pmi(corpus, pw, ppw[i], wi, pi)
+  pn = 0.
+  for i, ni in enumerate(n_idx):
+    pn += pmi(corpus, pw, npw[i], wi, ni)
+  return pp/len(p_idx) - pn/len(n_idx)
+
+
+def get_polar_seed(corpus, vocab_size, vocab2idx):
   p_w = get_Pw(corpus, vocab_size)
+
   print 'Calculating polar_seed...'
   polar_seed = [0. for _ in xrange(vocab_size)]
-  for wi, pw in tqdm(enumerate(p_w)):
-    pp = 0.
-    for pi in p_idx:
-      pp += pmi(corpus, p_w, wi, pi)
-    pn = 0.
-    for ni in n_idx:
-      pn += pmi(corpus, p_w, wi, ni)
-    polar_seed[wi] = pp/len(p_idx) - pn/len(n_idx)
+  p_idx, n_idx = get_seed_idx(P_seed, N_seed, vocab2idx)
+  ppw, npw = get_set_Pw(corpus, p_idx, n_idx)
+
+  for wi in tqdm(xrange(len(p_w))):
+    polar_seed[wi] = polar(corpus, p_idx, n_idx, ppw, npw, wi, p_w[wi])
+
   return sorted(enumerate(polar_seed), key=lambda x: x[1], reverse=True)
 
 
-def get_optimal_set(K, vocab_file, corpus_dir, p_seed, n_seed, polar_seed_file):
+def get_optimal_set(K, vocab_file, corpus_dir, polar_seed_file):
   def get_set(polar_seed, K):
     return polar_seed[:K], polar_seed[-K:]
 
@@ -86,7 +104,7 @@ def get_optimal_set(K, vocab_file, corpus_dir, p_seed, n_seed, polar_seed_file):
   vocab2idx, vocab_str, vocab_count = data_utils.load_vocab(vocab_file)
   vocab_size = len(vocab_count)
   for i, c in enumerate(vocab_count):
-    if c < 5:
+    if c < 5000:
       vocab_size = i
       break
   vocab_str = vocab_str[:vocab_size]
@@ -94,9 +112,7 @@ def get_optimal_set(K, vocab_file, corpus_dir, p_seed, n_seed, polar_seed_file):
   corpus = data_utils.load_news_corpus(corpus_dir)
   corpus = process_corpus(corpus)
 
-  p_idx, n_idx = get_seed_idx(P_seed, N_seed, vocab2idx)
-
-  polar_seed = get_polar_seed(corpus, vocab_size, p_idx, n_idx)
+  polar_seed = get_polar_seed(corpus, vocab_size, vocab2idx)
 
   print 'Saving polar seed in file %s'%polar_seed_file
   with open(polar_seed_file, 'w') as fout:
@@ -104,6 +120,7 @@ def get_optimal_set(K, vocab_file, corpus_dir, p_seed, n_seed, polar_seed_file):
       fout.write("%s\t%d\t%f\n"%(vocab_str[i], i, polar))
 
   return get_set(polar_seed, K)
+
 
 if __name__=='__main__':
   if len(sys.argv) != 5:
@@ -113,4 +130,4 @@ if __name__=='__main__':
   vocab_file, corpus_dir, polar_seed_file, K=sys.argv[1:]
   K = int(K)
 
-  get_optimal_set(K, vocab_file, corpus_dir, P_seed, N_seed, polar_seed_file)
+  get_optimal_set(K, vocab_file, corpus_dir, polar_seed_file)
