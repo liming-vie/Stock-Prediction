@@ -98,7 +98,7 @@ def get_optimal_set(K, vocab_file, corpus_dir, polar_seed_file):
     polar_seed = []
     for line in open(polar_seed_file):
       ps = line.split('\t')
-      polar_seed.append(float(ps[1]))
+      polar_seed.append(int(ps[1]))
     return get_set(polar_seed, K)
 
   vocab2idx, vocab_str, vocab_count = data_utils.load_vocab(vocab_file)
@@ -122,12 +122,42 @@ def get_optimal_set(K, vocab_file, corpus_dir, polar_seed_file):
   return get_set(polar_seed, K)
 
 
+def save_polar_optimal(K, vocab_file, corpus_dir, polar_seed_file, polar_optimal_file):
+  optimal_p, optimal_n = get_optimal_set(K, vocab_file, corpus_dir, polar_seed_file)
+
+  corpus = data_utils.load_news_corpus(corpus_dir)
+  corpus = process_corpus(corpus)
+
+  vocab2idx, vocab_str, vocab_count = data_utils.load_vocab(vocab_file)
+  vocab_size = len(vocab_count)
+  for i, c in enumerate(vocab_count):
+    if c < 500:
+      vocab_size = i
+      break
+  vocab_str = vocab_str[:vocab_size]
+
+  p_w = get_Pw(corpus, vocab_size)
+  print 'Calculating porlar_optimal...'
+  porlar_optimal = [0. for _ in xrange(vocab_size)]
+  ppw, npw = get_set_Pw(corpus, optimal_p, optimal_n)
+
+  for wi in tqdm(xrange(len(p_w))):
+    porlar_optimal[wi] = polar(corpus, optimal_p, optimal_n, ppw, npw, wi, p_w[wi])
+
+  porlar_optimal = sorted(enumerate(porlar_optimal), key=lambda x: x[1], reverse=True)
+
+  print 'Saving polar optimal in file %s'%polar_optimal_file
+  with open(polar_optimal_file, 'w') as fout:
+    for i, p in porlar_optimal:
+      fout.write("%s\t%d\t%f\n"%(vocab_str[i], i, p))
+
+
 if __name__=='__main__':
-  if len(sys.argv) != 5:
-    print 'Usage: python pmi.py vocab_file corpus_dir polar_seed_file K'
+  if len(sys.argv) != 6:
+    print 'Usage: python pmi.py vocab_file corpus_dir polar_seed_file K polar_optimal_file'
     sys.exit(1)
 
-  vocab_file, corpus_dir, polar_seed_file, K=sys.argv[1:]
+  vocab_file, corpus_dir, polar_seed_file, K, polar_optimal_file=sys.argv[1:]
   K = int(K)
 
-  get_optimal_set(K, vocab_file, corpus_dir, polar_seed_file)
+  save_polar_optimal(K, vocab_file, corpus_dir, polar_seed_file, polar_optimal_file)

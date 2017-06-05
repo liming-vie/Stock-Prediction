@@ -8,19 +8,21 @@
 # of patent rights can be found in the PATENTS file in the same directory.
 #
 
-if [ $# != 5]; then
-  echo 'Usage: sh train_fastText.sh stock_dir news_dir embed_train_file result_dir vector_file'
+if [ $# != 4 ]; then
+  echo 'Usage: sh train_fastText.sh train_file test_file output_dir vector_file'
   exit 1
 fi
 
-PRICE_DIR=$1
-NEWS_DIR=$2
-EMBED_TRAIN_FILE=$3
-RESULTDIR=$4
-VECTOR_FILE=$5
+TRAIN_FILE=$1
+TEST_FILE=$2
+RESULTDIR=$3
+VECTOR_FILE=$4
+EMBED_FILE=$5
+DIM=300
 BINDIR=../fastText
 
+mkdir -p $RESULTDIR
 
-$BINDIR/fasttext supervised -input $TRAIN_FILE -output "${RESULTDIR}/model" -dim 256 -lr 0.1 -wordNgrams 2 -minCount 5 -bucket 10000000 -epoch 5 -thread 24
+$BINDIR/fasttext supervised -input $TRAIN_FILE -output "${RESULTDIR}/model" -dim $DIM -lr 0.1 -wordNgrams 3 -minCount 5 -bucket 10000000 -epoch 50 -thread 24
 
-$BINDIR/fasttext print-sentence-vectors $RESULTDIR/model.bin < $EMBED_TRAIN_FILE > $RESULTDIR/VECTOR_FILE
+$BINDIR/fasttext print-sentence-vectors $RESULTDIR/model.bin < $TEST_FILE > $RESULTDIR/$VECTOR_FILE
