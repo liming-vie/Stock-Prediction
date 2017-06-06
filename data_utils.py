@@ -6,6 +6,7 @@ __author__ = 'liming-vie'
 import os
 import sys
 import copy
+import random
 import datetime
 import numpy as np
 from tqdm import tqdm
@@ -23,7 +24,7 @@ def str2date(tstr):
   return datetime.date(int(ps[0]), int(ps[1]), int(ps[2]))
 
 
-def load_stock_with_news(price_dir, news_dir, vocab_size):
+def load_stock_with_news(price_dir, news_dir, vocab_size=132718):
   basedate = datetime.date(2000, 1, 1)
   curdate = (datetime.date.today() - basedate).days
   stock_infos = {} # code2info
@@ -116,12 +117,15 @@ def stock_info_iter(stock_infos, train, batch_size, test_ratio, period_min_lengt
 
       prices, news, latest_date = [], [], None
       if not train:
-        for i in xrange(0, vi, 1):
-          news.append(info.news[i])
-          if info.prices[i] != None:
-            prices.append(info.prices[i])
+        news=info.news[:vi]
+        prices=[price for price in info.prices if price]
+        start = vi
+        end = len(info.news)
+      else:
+        start = 0
+        end = vi
 
-      for i in xrange(vi, len(info.news), 1):
+      for i in xrange(start, end, 1):
         news.append(info.news[i])
         if info.prices[i] != None:
           latest_date = info.dates[i]
@@ -129,16 +133,21 @@ def stock_info_iter(stock_infos, train, batch_size, test_ratio, period_min_lengt
           if not train or len(prices) > period_min_length:
             infos.append(make_data(info.code, info.name, prices, news, latest_date))
             if len(infos)  == batch_size:
+              if train:
+                random.shuffle(infos)
               yield infos
               infos=[]        
 
       if train and len(prices) <= period_min_length:
         infos.append(make_data(info.code, info.name, prices, news, latest_date))
         if len(infos)  == batch_size:
+          random.shuffle(infos)
           yield infos
           infos=[]
           
     if len(infos) > 0:
+      if train:
+        random.shuffle(infos)
       yield infos
 
 
@@ -284,6 +293,23 @@ def price_normalization(price_dir, output_dir):
         fout.write('\t'.join(map(str, n_p))+'\n')
 
 
+def save_news_and_price_number(price_dir, news_dir, output_file):
+  stock_info = load_stock_with_news(price_dir, news_dir)
+  print 'Calculating news and prices number...'
+  dic=[]
+  for code, info in tqdm(stock_info.iteritems()):
+    dic.append([code, info.name, \
+      len([i for i in info.news if i]), \
+      len([i for i in info.prices if i])])
+    dic[-1].append(float(dic[-1][2])/dic[-1][3] if dic[-1][3]!=0 else 0)
+  dic=sorted(dic, key=lambda x:x[-1])
+  print 'Saving news and prices number in file %s'%output_file
+  with open(output_file, 'w') as fout:
+    fout.write('code name news_num prices_num news_num/prices_num\n')
+    for info in dic:
+      fout.write("%s %s %d %d %f\n"%info)
+
+
 def save_fastText_corpus(price_dir, news_dir, output_dir, vocab_size=132718):
   unk_id=vocab_size-1
   def process_tokens(tokens):
@@ -321,16 +347,17 @@ def load_fastText_embed(doc_file, embed_file):
 
 
 if __name__ == '__main__':
-  if len(sys.argv) != 9:
-    print 'Usage: python data_utils.py news_dir segment_dir vocab_file token_ids_dir embedding_train_corpus price_dir normalized_price_dir fastText_dir'
+  if len(sys.argv) != 10:
+    print 'Usage: python data_utils.py news_dir segment_dir vocab_file token_ids_dir embedding_train_corpus price_dir normalized_price_dir fastText_dir number_info_file'
     sys.exit(1)
 
-  news_dir, segment_dir, vocab_file, token_ids_dir, embedding_train_file, price_dir, normalized_price_dir, fastText_dir = sys.argv[1:]
+  news_dir, segment_dir, vocab_file, token_ids_dir, embedding_train_file, price_dir, normalized_price_dir, fastText_dir, number_info_file = sys.argv[1:]
   '''
   segment_corpus(news_dir, segment_dir)
   vocab2idx = get_vocab2idx(segment_dir, vocab_file)
   transform_corpurs_to_token_ids(segment_dir, token_ids_dir, vocab2idx)
   saving_corpus(token_ids_dir, embedding_train_file)
   price_normalization(price_dir, normalized_price_dir)
-  '''
   save_fastText_corpus(normalized_price_dir, token_ids_dir, fastText_dir)
+  '''
+  save_news_and_price_number(normalized_price_dir, token_ids_dir, number_info_file)

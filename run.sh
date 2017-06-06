@@ -1,7 +1,7 @@
 #!/bin/bash
 
-start_step=1
-end_step=1
+start_step=0
+end_step=0
 
 output_dir='../output'
 raw_news_dir='../data/CnNewsReport'
@@ -14,13 +14,14 @@ news_dir=$output_dir/token_ids
 vocab_file=$output_dir/vocab
 price_dir=$output_dir/prices
 embedding_train_file=$output_dir/embedding_train_corpus
+number_info_file=$output_dir/number_info
 fastText_dir=$output_dir/fastText
 if [ $start_step -le 0 ]&&[ $end_step -ge 0 ]; then
   mkdir -p $segment_dir
   mkdir -p $news_dir
   mkdir -p $price_dir
   mkdir -p $fastText_dir
-  python data_utils.py $news_dir $segment_dir $vocab_file $news_dir $embedding_train_file $raw_price_dir $price_dir $fastText_dir
+  python data_utils.py $news_dir $segment_dir $vocab_file $news_dir $embedding_train_file $raw_price_dir $price_dir $fastText_dir $number_info_file
 fi
 
 # get P and N set
@@ -54,13 +55,16 @@ if [ $start_step -le 4 ]&&[ $end_step -ge 4 ]; then
 fi
 
 # train model
-train_dir=../output/train_data
+train_dir=$output_dir/train_data
 if [ $start_step -le 5 ]&&[ $end_step -ge 5 ]; then
   mkdir -p $train_dir
   python model.py --train_dir=$train_dir
 fi
 
 # test model
+test_output=$output_dir/test_result
+test_accuracy=$output_dir/stock_accuracy
 if [ $start_step -le 6 ]&&[ $end_step -ge 6 ]; then
-  python model.py --test --train_dir=$train_dir
+  python model.py --test --train_dir=$train_dir --test_output=$test_output --batch_size=128
+  python proc_result.py $test_output $number_info_file $test_accuracy
 fi

@@ -8,11 +8,13 @@ import os
 os.environ['TF_CPP_MIN_VLOG_LEVEL'] = '3'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 from tensorflow import logging
-logging.set_verbosity(logging.ERROE)
+logging.set_verbosity(logging.ERROR)
 
+import sys
 import random
 import data_utils
 import numpy as np
+from tqdm import tqdm
 import tensorflow as tf
 
 from data_utils import News
@@ -31,30 +33,30 @@ tf.app.flags.DEFINE_string('fastText_vector_file', '../output/fastText/vectors.t
 
 tf.app.flags.DEFINE_boolean('test', False, 'set to True for predict task')
 tf.app.flags.DEFINE_float('test_ratio', 0.2, 'use test_ratio of data for test')
-tf.app.flags.DEFINE_integer('batch_size'， 32, '')
+tf.app.flags.DEFINE_integer('batch_size', 32, '')
 
 tf.app.flags.DEFINE_integer('content_max_length', 5000,'max length for news content')
 tf.app.flags.DEFINE_integer('title_max_length', 75,'max length for news content')
-tf.app.flags.DEFINE_integer('period_max_length', 300, 'min length for time period')
-tf.app.flags.DEFINE_integer('period_min_length', 5, 'min length for time period')
+tf.app.flags.DEFINE_integer('period_max_length', 30, 'min length for time period')
+tf.app.flags.DEFINE_integer('period_min_length', 1, 'min length for time period')
 
 tf.app.flags.DEFINE_integer('title_units', 64, 'number of units in title birnn forward and backward cells')
 tf.app.flags.DEFINE_integer('title_layers', 2, 'number of layers in title birnn forward and backward cells')
 tf.app.flags.DEFINE_integer('content_units', 128, '')
-tf.app.flags.DEFINE_integer('content_layers', 2, '')
-tf.app.flags.DEFINE_integer('price_units', 128, '')
+tf.app.flags.DEFINE_integer('content_layers', 3, '')
+tf.app.flags.DEFINE_integer('price_units', 64, '')
 tf.app.flags.DEFINE_integer('price_layers', 3, '')
-tf.app.flags.DEFINE_integer('doc_units', 256, '')
-tf.app.flags.DEFINE_integer('doc_layers', 3, '')
+tf.app.flags.DEFINE_integer('doc_units', 128, '')
+tf.app.flags.DEFINE_integer('doc_layers', 4, '')
 
 tf.app.flags.DEFINE_integer('fc_layers', 4, 'number of full connect layers')
-tf.app.flags.DEFINE_string('fc_units', '1024, 512, 256, 256', 'number of units in full connect layers')
+tf.app.flags.DEFINE_string('fc_units', '512, 512, 256, 256', 'number of units in full connect layers')
 
 tf.app.flags.DEFINE_float('l2_coef', 0.1, 'L2 regularizer coeficient')
-tf.app.flags.DEFINE_float('init_lr', 0.5, 'initial learning rate')
+tf.app.flags.DEFINE_float('init_lr', 0.001, 'initial learning rate')
 tf.app.flags.DEFINE_float('lr_decay', 0.95, 'learning rate decay coef')
 tf.app.flags.DEFINE_integer('train_steps', 30000, 'number of training step')
-tf.app.flags.DEFINE_integer('ckpt_per_steps', 500, 'save checkpoint per ckpt_per_steps steps')
+tf.app.flags.DEFINE_integer('ckpt_per_steps', 1, 'save checkpoint per ckpt_per_steps steps')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -70,8 +72,9 @@ class StockPrediction:
     # load doc embedding
     self.doc_embedding, doc_dim = data_utils.load_fastText_embed(\
       FLAGS.fastText_doc_file, FLAGS.fastText_vector_file)
-    self.doc_embedding[self.doc_key([self.vocab_size], [self.vocab_size])] = \
-      [0. for _ in xrange(doc_dim)]
+    self.zero_doc_key = self.doc_key([self.vocab_size], [self.vocab_size])
+    self.doc_embedding[self.zero_doc_key] = [0. for _ in xrange(doc_dim)]
+
 
     FLAGS.fc_units = map(int, FLAGS.fc_units.split(','))
 
@@ -111,7 +114,7 @@ class StockPrediction:
       title_embed = self.embed_birnn(FLAGS.title_units, FLAGS.title_layers, 
         self.title, self.title_length, scope='title_embed_birnn')
       content_embed = self.embed_birnn(FLAGS.content_units, FLAGS.content_layers,
-        self.content, self.content_length], scope='content_embed_birnn')
+        self.content, self.content_length, scope='content_embed_birnn')
       price_embed = self.birnn(FLAGS.price_units, FLAGS.price_layers,
         self.prices, self.price_length, scope='price_birnn')
       doc_embed = self.birnn(FLAGS.doc_units, FLAGS.doc_layers, 
@@ -154,7 +157,7 @@ class StockPrediction:
           .minimize(self.cross_entropy, self.global_step)
 
     with tf.variable_scope('logs'):
-      self.saver = tf.train.Saver(tf.global_variables())
+      self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=100)
       self.log_writer=tf.summary.FileWriter(
         os.path.join(FLAGS.train_dir, 'logs/'), self.session.graph)
       self.summary = tf.Summary()
@@ -212,6 +215,10 @@ class StockPrediction:
     content_str = ' '.join(map(str, content))
     return hash("%s %s"%(title_str, content_str))
 
+  def get_doc_embed_with(self, title, content):
+    return self.doc_embedding.get(self.doc_key(title, content),\
+      self.doc_embedding[self.zero_doc_key])
+
 
   def merge_glove_word2vec(self, glove, word2vec):
     l=len(glove) # assume glove and word2vec has the same vocab
@@ -223,6 +230,7 @@ class StockPrediction:
 
   def make_input(self, batch_data, training=True):
     zero_id=self.vocab_size
+
     def get_titles_and_contents(info):
       if len(info.news) == 0:
         return [[[zero_id]], [1], [[zero_id]], [1]]
@@ -234,73 +242,63 @@ class StockPrediction:
           titles.append([zero_id])
           contents.append([zero_id])
         else:
-          random.shuffle(news)
-          titles.append(news[0].title)
-          contents.append(news[0].content)
+          idx=random.randint(0, len(news)-1)
+          titles.append(news[idx].title)
+          contents.append(news[idx].content)
         title_length.append(len(titles[-1]))
         content_length.append(len(contents[-1]))
       return [titles, title_length, contents, content_length]
 
     zero_price=[0. for _ in xrange(7)]
     def get_prices(info):
-      idx=len(info.prices)-1
-      while idx>=0:
-        if info.prices[idx] != None:
-          break
-        idx-=1
-      idx+=1
-      if idx <= 0:
+      prices=[price for price in info.prices if price]
+      if len(prices)>FLAGS.period_max_length:
+        prices=prices[-FLAGS.period_max_length:]
+      elif len(prices) == 0:
         prices = [zero_price]
-      else:
-        prices=[]
-        for price in info.prices[:idx]:
-          if price:
-            prices.append(price)
-      l=len(prices)
-      if l>FLAGS.period_max_length:
-        l=FLAGS.period_max_length
-        prices=prices[-l:]
-      return prices, len(prices)
+      return [prices, len(prices)]
 
     def align_batch_data(batch, length, max_length, padding):
-      max_l = max([length for data in batch])
-      max_l = min(max_l, max_length)
+      max_l = min(max_length, max(length))
       for i, data in enumerate(batch):
         if length[i] < max_l:
-          data.extend([padding for _ in xrange(max_l-length[i]))
+          batch[i].extend([padding for _ in xrange(max_l-length[i])])
         elif length[i] > max_l:
           length[i] = max_l
           batch[i] = data[:max_l]
+      return [batch, length]
 
     def get_doc_embedding(titles, contents):
-      ret = []
-      for title, content in zip(titles[-FLAGS.period_max_length:], \
-        contents[-FLAGS.period_max_length:]):
-        ret.append(self.doc_embedding[self.doc_key(title, content)])
-      return ret, len(ret)
+      ret = [self.get_doc_embed_with(title, content) for title, content \
+          in zip(titles[-FLAGS.period_max_length:], \
+              contents[-FLAGS.period_max_length:])]
+      return [ret, len(ret)]
 
     def get_label(change):
       return [1, 0] if change<=0. else [0, 1]
 
     news_info = [get_titles_and_contents(info) for info in batch_data]
 
-    doc_embed, doc_length = [get_doc_embedding(info[0], info[2]) for info in news_info]
-    doc_embed, doc_length = align_batch_data(doc_embed, doc_length, \
-      FLAGS.period_max_length, self.doc_embedding[self.doc_key([zero_id], [zero_id])])
+    docs_info = [get_doc_embedding(info[0], info[2]) for info in news_info]
+    doc_embed, doc_length = align_batch_data([info[0] for info in docs_info], \
+      [info[1] for info in docs_info], FLAGS.period_max_length, \
+      self.doc_embedding[self.zero_doc_key])
 
-    contents, content_length = align_batch_data([data[-1] for data in news_info[2]], \
-      [data[-1] for data in news_info[3]], \
-      FLAGS.content_max_length, [zero_id])
-    titles, title_length = align_batch_data([data[-1] for data in news_info[0]], \
-      [data[-1] for data in news_info[1]], \
-      FLAGS.title_max_length, [zero_id])
+    contents, content_length = align_batch_data([info[2][-1] for info in news_info], \
+      [info[3][-1] for info in news_info], \
+      FLAGS.content_max_length, zero_id)
+    titles, title_length = align_batch_data([info[0][-1] for info in news_info], \
+      [info[1][-1] for info in news_info], \
+      FLAGS.title_max_length, zero_id)
 
     prices_info = [get_prices(info) for info in batch_data]
-    prices, price_length = align_batch_data(prices_info[0], prices_info[1], \
+    prices, price_length = align_batch_data([info[0] for info in prices_info], \
+      [info[1] for info in prices_info], \
       FLAGS.period_max_length, zero_price)
 
     return {
       self.training : training,
+      self.label : [get_label(info.change) for info in batch_data],
 
       self.title : titles,
       self.title_length : title_length,
@@ -311,10 +309,8 @@ class StockPrediction:
       self.prices : prices,
       self.price_length : price_length,
 
-      self.docs: doc_embed,
-      self.doc_length: doc_length,
-
-      self.label : [get_label(info.change) for info in batch_data]
+      self.docs : doc_embed,
+      self.doc_length : doc_length
     }
 
 
@@ -339,6 +335,7 @@ class StockPrediction:
     with self.session.as_default():
       self.init_model()
       checkpoint_path = os.path.join(FLAGS.train_dir, "model.ckpt")
+      print 'Checkpoint directory in %s'%FLAGS.train_dir
 
       print 'Start training...'
       cross_entropy = 0.0
@@ -354,6 +351,7 @@ class StockPrediction:
           cross_entropy /= FLAGS.ckpt_per_steps
           print ("global_step %d, cross entropy %f, learning rate %f"%( 
             step, cross_entropy, self.learning_rate.eval()))
+          sys.stdout.flush()
 
           if cross_entropy > max(prev_cross_entropy):
             self.session.run(self.lr_decay_op)
@@ -371,23 +369,25 @@ class StockPrediction:
     total=0
     correct=0
     with self.session.as_default(), open(FLAGS.test_output, 'w') as fout:
-      fout.write('code name date label y')
+      fout.write('code name date label y probs\n')
       self.init_model()
 
       print 'Start testing...'
       for batch in tqdm(data_iter):
         input_feed=self.make_input(batch)
         results = self.session.run(self.result, input_feed)
-        for result, label in zip(results, input_feed[self.label]):
+        for info, result, label in zip(batch, results, input_feed[self.label]):
           label = np.argmax(label) 
           y=np.argmax(result)
           if y==label:
             correct+=1
           total += 1
-          fout.write('%s %s %s %d %f\n'%(   \
-            info.code, info.name, info.date, label, result[y]))
+          fout.write('%s %s %s %f %d %s\n'%(   \
+            info.code, info.name, info.date, info.change, y, \
+              ','.join(map(str, result))))
+        fout.flush()
     print 'Test done, accuracy: %f'%(float(correct)/total)
-    print 'Test result saved in %f'%FLAGS.test_output
+    print 'Test result saved in %s'%FLAGS.test_output
 
 
 def main(_):
