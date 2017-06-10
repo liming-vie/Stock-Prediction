@@ -63,8 +63,9 @@ fi
 
 # test model
 test_output=$output_dir/test_result
-test_accuracy=$output_dir/stock_accuracy
+test_accuracy=$output_dir/accuracy
+test_acc_news=$output_dir/accuracy_sort_news
 if [ $start_step -le 6 ]&&[ $end_step -ge 6 ]; then
   python model.py --test --train_dir=$train_dir --test_output=$test_output --batch_size=128
-  python proc_result.py $test_output $number_info_file $test_accuracy
+  python proc_result.py $test_output $number_info_file $test_accuracy $test_acc_news
 fi

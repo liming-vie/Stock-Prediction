@@ -56,7 +56,7 @@ tf.app.flags.DEFINE_float('l2_coef', 0.1, 'L2 regularizer coeficient')
 tf.app.flags.DEFINE_float('init_lr', 0.001, 'initial learning rate')
 tf.app.flags.DEFINE_float('lr_decay', 0.95, 'learning rate decay coef')
 tf.app.flags.DEFINE_integer('train_steps', 30000, 'number of training step')
-tf.app.flags.DEFINE_integer('ckpt_per_steps', 1, 'save checkpoint per ckpt_per_steps steps')
+tf.app.flags.DEFINE_integer('ckpt_per_steps', 100, 'save checkpoint per ckpt_per_steps steps')
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -85,9 +85,9 @@ class StockPrediction:
     ''' graph '''
     print 'Initializing model graph...'
     with tf.variable_scope('inputs'):
-      self.training = tf.placeholder(tf.bool, name='training') 
+      self.training = tf.placeholder(tf.bool, name='training')
 
-      self.title = tf.placeholder(tf.int32, shape=[None, None], 
+      self.title = tf.placeholder(tf.int32, shape=[None, None],
         name='title') # [batch size, sequence length]
       self.content = tf.placeholder(tf.int32, shape=[None, None],
         name='content')
@@ -111,13 +111,13 @@ class StockPrediction:
     with tf.variable_scope('birnn_embed'):
       self.word_embedding = tf.Variable(merged_embed, dtype=tf.float32,
         name='word_embedding_matrix')
-      title_embed = self.embed_birnn(FLAGS.title_units, FLAGS.title_layers, 
+      title_embed = self.embed_birnn(FLAGS.title_units, FLAGS.title_layers,
         self.title, self.title_length, scope='title_embed_birnn')
       content_embed = self.embed_birnn(FLAGS.content_units, FLAGS.content_layers,
         self.content, self.content_length, scope='content_embed_birnn')
       price_embed = self.birnn(FLAGS.price_units, FLAGS.price_layers,
         self.prices, self.price_length, scope='price_birnn')
-      doc_embed = self.birnn(FLAGS.doc_units, FLAGS.doc_layers, 
+      doc_embed = self.birnn(FLAGS.doc_units, FLAGS.doc_layers,
         self.docs, self.doc_length, scope='doc_birnn')
       final_embed = tf.concat([title_embed, content_embed, doc_embed, price_embed], 1)
 
@@ -126,7 +126,7 @@ class StockPrediction:
       for i in range(FLAGS.fc_layers):
         with tf.variable_scope('full_connect_layer_%d'%i):
           fc_outputs = tf.contrib.layers.legacy_fully_connected(
-            fc_inputs, FLAGS.fc_units[i], 
+            fc_inputs, FLAGS.fc_units[i],
             activation_fn=tf.nn.relu,
             weight_regularizer=tf.contrib.layers.l2_regularizer(
               FLAGS.l2_coef))
@@ -136,18 +136,18 @@ class StockPrediction:
       dropout = tf.layers.dropout(fc_outputs, training=self.training)
 
     with tf.variable_scope('output'):
-      W = tf.get_variable('W', shape=[FLAGS.fc_units[-1], 2], 
+      W = tf.get_variable('W', shape=[FLAGS.fc_units[-1], 2],
         initializer=tf.truncated_normal_initializer())
-      biases = tf.get_variable('biases', shape=[2], 
+      biases = tf.get_variable('biases', shape=[2],
         initializer=tf.random_normal_initializer())
       logits=tf.matmul(dropout, W)+biases
       self.result = tf.nn.softmax(logits)
 
     with tf.variable_scope('train'):
       self.cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=[self.label], logits=logits))
+        tf.nn.softmax_cross_entropy_with_logits(labels=self.label, logits=logits))
 
-      self.learning_rate = tf.Variable(FLAGS.init_lr, trainable=False, 
+      self.learning_rate = tf.Variable(FLAGS.init_lr, trainable=False,
         name="learning_rate")
       self.lr_decay_op = self.learning_rate.assign(
         self.learning_rate * FLAGS.lr_decay)
@@ -176,13 +176,13 @@ class StockPrediction:
       fw_cell = self.lstm_cell(units, layers, 'forward')
       bw_cell = self.lstm_cell(units, layers, 'backward')
       _, states = tf.nn.bidirectional_dynamic_rnn(
-        fw_cell, bw_cell, inputs, 
+        fw_cell, bw_cell, inputs,
         sequence_length=input_length,
         dtype=tf.float32)
 
       def proc_multi_layer_state(state, num_units, num_layers, scope):
         with tf.variable_scope(scope):
-          # from [num_layers, batch_size, num_units] 
+          # from [num_layers, batch_size, num_units]
           # to [batch_size, 2, num_layers, num_units]
           state = tf.transpose(state, perm=[2, 0, 1, 3])
           # [batch_size, num_layers*num_units]
@@ -190,7 +190,7 @@ class StockPrediction:
 
       def proc_single_layer_state(state, num_units, scope):
         with tf.variable_scope(scope):
-          # from [2, batch_size, num_units] 
+          # from [2, batch_size, num_units]
           # to [batch_size, 2, num_units]
           state = tf.transpose(state, perm=[1, 0, 2])
           return tf.reshape(state, [-1, num_units*2])
@@ -238,7 +238,7 @@ class StockPrediction:
       titles, contents = [], []
       title_length, content_length = [], []
       for news in info.news:
-        if not news: 
+        if not news:
           titles.append([zero_id])
           contents.append([zero_id])
         else:
@@ -349,7 +349,7 @@ class StockPrediction:
         # save checkpoint
         if step % FLAGS.ckpt_per_steps == 0:
           cross_entropy /= FLAGS.ckpt_per_steps
-          print ("global_step %d, cross entropy %f, learning rate %f"%( 
+          print ("global_step %d, cross entropy %f, learning rate %f"%(
             step, cross_entropy, self.learning_rate.eval()))
           sys.stdout.flush()
 
@@ -377,7 +377,7 @@ class StockPrediction:
         input_feed=self.make_input(batch)
         results = self.session.run(self.result, input_feed)
         for info, result, label in zip(batch, results, input_feed[self.label]):
-          label = np.argmax(label) 
+          label = np.argmax(label)
           y=np.argmax(result)
           if y==label:
             correct+=1
